@@ -1,0 +1,24 @@
+# Chronos Observatory Config
+
+pulseScoreWeights:
+  slotHealth: 40       # Weight for slot timing and skips
+  tipPressure: 30      # Weight for Jito tip auction competition
+  leaderReliability: 30 # Weight for upcoming leader historical reliability
+
+timing:
+  slotCadenceTargetMs: 400
+  stateBackupIntervalSec: 30
+  decisionCycleIntervalSlots: 10
+  statusPollingIntervalMs: 2000
+
+execution:
+  dryRun: false
+  maxRetries: 3
+  minTipLamports: 1000
+  maxTipLamports: 5000000 # 0.005 SOL cap
+  defaultTipLamports: 50000
+
+consensus:
+  majorityThresholdPct: 0.67   # 2-of-3 providers must agree on the same action
+  tipTolerancePct: 0.20        # Provider tips must be within ±20% of median to proceed
+  # If tips exceed tolerance, the system will HOLD and re-evaluate rather than submit

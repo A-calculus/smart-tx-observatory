@@ -1,0 +1,10 @@
+node_modules/
+data/ledger.jsonl
+state/snapshot.json
+dist
+constriants.md
+.env
+implementation_plan.md
+jito.md
+solinfra.docs.md
+walkthrough.md

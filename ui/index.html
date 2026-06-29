@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CHRONOS Observatory</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --bg-light: #111;
+      --primary: #00FFB3;
+      --primary-dim: rgba(0, 255, 179, 0.2);
+      --secondary: #7FFFD4;
+      --warn: #FFD700;
+      --error: #FF4444;
+      --border: 1px solid var(--primary);
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background-color: var(--bg);
+      color: var(--primary);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Scanline effect */
+    body::after {
+      content: " ";
+      display: block;
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      z-index: 2;
+      background-size: 100% 2px, 3px 100%;
+      pointer-events: none;
+    }
+
+    header {
+      padding: 10px 20px;
+      border-bottom: var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .title { font-weight: bold; font-size: 1.2em; text-transform: uppercase; letter-spacing: 2px; }
+    
+    .nav-tabs {
+      display: flex;
+      gap: 10px;
+    }
+
+    .tab {
+      background: transparent;
+      border: var(--border);
+      color: var(--primary);
+      padding: 5px 15px;
+      font-family: inherit;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+
+    .tab:hover { background: var(--primary-dim); }
+    .tab.active { background: var(--primary); color: var(--bg); font-weight: bold; }
+
+    main {
+      flex: 1;
+      display: flex;
+      padding: 10px;
+      gap: 10px;
+      height: calc(100vh - 90px); /* leave room for header & footer */
+    }
+
+    .panel {
+      border: var(--border);
+      background: var(--bg-light);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-header {
+      border-bottom: var(--border);
+      padding: 5px 10px;
+      font-weight: bold;
+      background: var(--primary-dim);
+    }
+
+    .panel-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    /* Left pane - logs */
+    .left-pane { flex: 0 0 55%; display: flex; flex-direction: column; gap: 10px; }
+    
+    .sys-logs-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; border: var(--border); background: var(--bg-light); }
+    .slot-logs-panel { flex: 0 0 150px; display: flex; flex-direction: column; overflow: hidden; border: var(--border); background: var(--bg-light); }
+
+    .log-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 10px;
+      overflow-y: auto;
+      height: 100%;
+    }
+
+    .log-line { word-break: break-all; }
+    .log-time { color: var(--secondary); margin-right: 8px; opacity: 0.7; }
+    .log-src { color: #aaa; margin-right: 8px; width: 120px; display: inline-block; }
+    .log-error { color: var(--error); }
+    .log-warn { color: var(--warn); }
+
+    /* Right pane - tabs */
+    .right-pane { flex: 0 0 calc(45% - 10px); position: relative; }
+
+    .tab-content { display: none; height: 100%; flex-direction: column; }
+    .tab-content.active { display: flex; }
+
+    /* AI Decision Box */
+    .ai-decision {
+      border: var(--border);
+      padding: 15px;
+      margin-bottom: 15px;
+      background: rgba(0,0,0,0.5);
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      background: var(--primary);
+      color: var(--bg);
+      font-weight: bold;
+      border-radius: 2px;
+    }
+    .badge.hold { background: var(--warn); }
+    .badge.skip { background: #666; }
+
+    /* Consensus Grid */
+    .consensus-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .provider-card {
+      border: 1px solid #444;
+      padding: 10px;
+      text-align: center;
+    }
+    .provider-card.agreed { border-color: var(--primary); background: var(--primary-dim); }
+
+    /* Forms */
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; color: var(--secondary); }
+    input, select, textarea {
+      width: 100%;
+      background: transparent;
+      border: 1px solid #555;
+      color: var(--primary);
+      font-family: inherit;
+      padding: 8px;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); outline: none; }
+    button.action-btn {
+      background: var(--primary-dim);
+      border: var(--border);
+      color: var(--primary);
+      padding: 10px 20px;
+      cursor: pointer;
+      font-family: inherit;
+      width: 100%;
+      text-transform: uppercase;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    button.action-btn:hover { background: var(--primary); color: var(--bg); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Status Bar */
+    footer {
+      height: 40px;
+      border-top: var(--border);
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow-x: auto;
+      background: var(--bg-light);
+    }
+
+    .tx-pill {
+      border: 1px solid #555;
+      padding: 2px 8px;
+      font-size: 0.9em;
+      white-space: nowrap;
+      display: flex;
+      gap: 8px;
+      background: #000;
+    }
+    .tx-pill.running { border-color: var(--primary); color: var(--primary); }
+    .tx-pill.verified { border-color: var(--primary); background: var(--primary); color: var(--bg); }
+    .tx-pill.failed { border-color: var(--error); color: var(--error); }
+    .tx-pill.watching { border-color: var(--warn); color: var(--warn); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #333; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title">CHRONOS <span id="pulse-score" style="color:var(--warn)">PULSE: --</span></div>
+    <div class="nav-tabs">
+      <button class="tab active" data-target="tab-sim">Simulation</button>
+      <button class="tab" data-target="tab-tx">Send TX</button>
+      <button class="tab" data-target="tab-contract">Contract</button>
+      <button class="tab" data-target="tab-consensus">Consensus</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left Pane: Global Log Stream -->
+    <div class="left-pane">
+      <div class="sys-logs-panel">
+        <div class="panel-header">System Logs</div>
+        <div class="log-container" id="sys-log-container"></div>
+      </div>
+      <div class="slot-logs-panel">
+        <div class="panel-header" style="background:#222;">Slot Watcher</div>
+        <div class="log-container" id="slot-log-container" style="font-size:0.9em; opacity:0.8;"></div>
+      </div>
+    </div>
+
+    <!-- Right Pane: Contextual Tabs -->
+    <div class="panel right-pane">
+      
+      <!-- SIMULATION TAB -->
+      <div id="tab-sim" class="tab-content active">
+        <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Observatory Status (AI: <span id="current-mode">SINGLE</span>)</span>
+          <button id="btn-toggle-sim" style="background: var(--primary-dim); border: var(--border); color: var(--primary); padding: 2px 10px; cursor: pointer;">
+            Enable AI Sim: OFF
+          </button>
+        </div>
+        <div class="panel-content">
+          <div class="ai-decision">
+            <div style="margin-bottom:10px; color:var(--secondary)">Execution AI (Timing) (Slot: <span id="ai-exec-slot">--</span>)</div>
+            <div style="font-size: 1.2em; margin-bottom: 10px;">
+              <span id="ai-exec-action" class="badge">AWAITING</span>
+              <span style="margin-left:10px;">Tip: <span id="ai-exec-tip">0</span> lam</span>
+            </div>
+            <div style="color:#aaa; font-style:italic" id="ai-exec-reason">Waiting for first decision cycle...</div>
+          </div>
+          
+          <div class="ai-decision">
+            <div style="margin-bottom:10px; color:var(--secondary)">Diagnostic AI (Recovery) (Slot: <span id="ai-diag-slot">--</span>)</div>
+            <div style="font-size: 1.2em; margin-bottom: 10px;">
+              <span id="ai-diag-action" class="badge skip">AWAITING</span>
+              <span style="margin-left:10px;">Tip: <span id="ai-diag-tip">0</span> lam</span>
+            </div>
+            <div style="color:#aaa; font-style:italic" id="ai-diag-reason">No recent failures...</div>
+          </div>
+
+          <div style="margin-top:20px;">
+            <p><strong>Network State</strong></p>
+            <p>Latest Slot: <span id="stat-slot">0</span></p>
+            <p>p50 Tip: <span id="stat-p50">0</span> lamports</p>
+            <p>Total Tips Paid: <span id="stat-total-tips">0</span> lamports</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEND TX TAB -->
+      <div id="tab-tx" class="tab-content">
+        <div class="panel-header">AI-Timed Transfer</div>
+        <div class="panel-content">
+          <p style="margin-bottom:15px; color:var(--secondary)">
+            Queue a transfer. CHRONOS AI will monitor network congestion and dispatch as a Jito bundle at the optimal slot.
+          </p>
+          
+          <div class="form-group">
+            <label>Asset</label>
+            <select id="tx-asset">
+              <option value="SOL">SOL (Loading...)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label>Recipient Address</label>
+            <input type="text" id="tx-recipient" placeholder="Solana base58 address">
+          </div>
+          
+          <div class="form-group">
+            <label>Amount (Lamports/Base units)</label>
+            <input type="number" id="tx-amount" placeholder="e.g. 1000000">
+            <div style="font-size:0.8em; color:#aaa; margin-top:5px;" id="tx-max-balance">Max available: --</div>
+          </div>
+          
+          <button class="action-btn" id="btn-send-tx">Queue for AI Dispatch</button>
+        </div>
+      </div>
+
+      <!-- CONTRACT TAB -->
+      <div id="tab-contract" class="tab-content">
+        <div class="panel-header">AI-Timed Contract Deploy</div>
+        <div class="panel-content">
+          <p style="margin-bottom:15px; color:var(--secondary)">
+            Deploy a compiled BPF program (.so). AI will wait for low tip pressure, then submit a Jito tip bundle followed by RPC chunking.
+          </p>
+          
+          <div class="form-group">
+            <label>Compiled Program (.so)</label>
+            <input type="file" id="contract-file" accept=".so">
+          </div>
+          
+          <div class="form-group">
+            <label>Deployment Label (Optional)</label>
+            <input type="text" id="contract-label" placeholder="e.g. MyDefiProgram">
+          </div>
+          
+          <button class="action-btn" id="btn-deploy-contract" disabled>Queue Deployment</button>
+        </div>
+      </div>
+
+      <!-- CONSENSUS TAB -->
+      <div id="tab-consensus" class="tab-content">
+        <div class="panel-header">AI Consensus Engine (3 Providers)</div>
+        <div class="panel-content">
+          <p style="margin-bottom:15px; color:var(--secondary)">
+            Requires 2-of-3 majority on action, and tip agreement within ±20% of median.
+          </p>
+          
+          <button class="action-btn" id="btn-run-selftest" style="margin-bottom: 15px;">Run Self-Test</button>
+          
+          <div id="selftest-results" style="margin-bottom: 20px; font-size:0.9em; display:none;">
+            <div>Provider 1: <span id="st-p1">...</span></div>
+            <div>Provider 2: <span id="st-p2">...</span></div>
+            <div>Provider 3: <span id="st-p3">...</span></div>
+          </div>
+
+          <button class="action-btn" id="btn-activate-consensus" disabled style="margin-bottom:20px; border-color:var(--warn); color:var(--warn)">Activate Consensus Mode</button>
+
+          <div style="border-top:1px solid #444; padding-top:15px;">
+            <h4>Live Vote Grid</h4>
+            <div class="consensus-grid" id="consensus-grid">
+              <!-- Populated dynamically via WS -->
+              <div class="provider-card" id="vote-0">Waiting...</div>
+              <div class="provider-card" id="vote-1">Waiting...</div>
+              <div class="provider-card" id="vote-2">Waiting...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Bottom TX Status Bar -->
+  <footer id="tx-footer">
+    <!-- <div class="tx-pill running"><span>[DEPLOY]</span> <span>RUNNING</span></div> -->
+  </footer>
+
+  <script>
+    // ── UI Navigation ────────────────────────────────────────────────────────
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        e.target.classList.add('active');
+        document.getElementById(e.target.dataset.target).classList.add('active');
+      });
+    });
+
+    // ── WebSocket Connection ─────────────────────────────────────────────────
+    const wsUrl = `ws://${window.location.host}/ws`;
+    let ws;
+    
+    function connectWS() {
+      ws = new WebSocket(wsUrl);
+      
+      ws.onopen = () => console.log('Connected to CHRONOS WS');
+      ws.onclose = () => setTimeout(connectWS, 2000);
+      
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (!msg.type) return;
+
+        switch (msg.type) {
+          case 'LOG': appendLog(msg); break;
+          case 'STATE_SNAPSHOT': updateState(msg.state); break;
+          case 'AI_DECISION': updateAIDecision(msg); break;
+          case 'TX_SUMMARY': updateTxPill(msg); break;
+          case 'WALLET_TOKENS': updateWallet(msg); break;
+          case 'CONSENSUS_VOTE': updateConsensusVote(msg); break;
+          case 'CONSENSUS_TEST_RESULT': updateSelfTest(msg); break;
+          case 'MODE_CHANGE': document.getElementById('current-mode').textContent = msg.mode.toUpperCase(); break;
+        }
+      };
+    }
+    
+    connectWS();
+
+    // ── Data Handlers ────────────────────────────────────────────────────────
+    const sysLogContainer = document.getElementById('sys-log-container');
+    const slotLogContainer = document.getElementById('slot-log-container');
+
+    function appendLog(log) {
+      const el = document.createElement('div');
+      el.className = `log-line log-${log.level}`;
+      const time = new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      el.innerHTML = `<span class="log-time">[${time}]</span><span class="log-src">${log.source}</span> ${log.message}`;
+      
+      // Route Slot logs to dedicated panel
+      if (log.source === 'SlotWatcher' && log.message.includes('Slot received:')) {
+        slotLogContainer.appendChild(el);
+        if (slotLogContainer.children.length > 50) slotLogContainer.firstChild.remove();
+        slotLogContainer.scrollTop = slotLogContainer.scrollHeight;
+      } else {
+        sysLogContainer.appendChild(el);
+        if (sysLogContainer.children.length > 500) sysLogContainer.firstChild.remove();
+        sysLogContainer.scrollTop = sysLogContainer.scrollHeight;
+      }
+    }
+
+    function updateState(state) {
+      document.getElementById('pulse-score').textContent = `PULSE: ${state.pulseScore.current}`;
+      document.getElementById('stat-slot').textContent = state.network.latestSlot;
+      document.getElementById('stat-p50').textContent = state.network.tips.percentiles.p50;
+      document.getElementById('stat-total-tips').textContent = state.bundles.totalTipsPaidLamports;
+
+      const btnSim = document.getElementById('btn-toggle-sim');
+      if (state.isSimulationActive) {
+        btnSim.textContent = 'Enable AI Sim: ON';
+        btnSim.style.background = 'var(--primary)';
+        btnSim.style.color = 'var(--bg)';
+      } else {
+        btnSim.textContent = 'Enable AI Sim: OFF';
+        btnSim.style.background = 'var(--primary-dim)';
+        btnSim.style.color = 'var(--primary)';
+      }
+      btnSim.dataset.active = state.isSimulationActive ? 'true' : 'false';
+    }
+
+    function updateAIDecision(dec) {
+      if (dec.aiType === 'EXECUTION') {
+        document.getElementById('ai-exec-slot').textContent = dec.slot;
+        const badge = document.getElementById('ai-exec-action');
+        badge.textContent = dec.action;
+        badge.className = 'badge ' + dec.action.toLowerCase();
+        document.getElementById('ai-exec-tip').textContent = dec.tip;
+        document.getElementById('ai-exec-reason').textContent = dec.reasoning;
+      } else if (dec.aiType === 'DIAGNOSTIC') {
+        document.getElementById('ai-diag-slot').textContent = dec.slot;
+        const badge = document.getElementById('ai-diag-action');
+        badge.textContent = dec.action;
+        badge.className = 'badge ' + dec.action.toLowerCase();
+        document.getElementById('ai-diag-tip').textContent = dec.tip;
+        document.getElementById('ai-diag-reason').textContent = dec.reasoning;
+      }
+    }
+
+    // TX Pills Map
+    const txPills = new Map();
+    const footer = document.getElementById('tx-footer');
+
+    function updateTxPill(tx) {
+      let el = txPills.get(tx.id);
+      if (!el) {
+        el = document.createElement('div');
+        txPills.set(tx.id, el);
+        footer.appendChild(el);
+      }
+      
+      const statusClass = tx.status.toLowerCase();
+      el.className = `tx-pill ${statusClass}`;
+      
+      let icon = '◉';
+      if (statusClass === 'running') icon = '▶';
+      if (statusClass === 'verified') icon = '✓';
+      if (statusClass === 'failed') icon = '✕';
+
+      el.innerHTML = `<span>[${tx.label}]</span> <span>${icon} ${tx.status}</span> <span style="opacity:0.7">${tx.detail || ''}</span>`;
+      
+      if (statusClass === 'verified' || statusClass === 'failed') {
+        setTimeout(() => { el.remove(); txPills.delete(tx.id); }, 10000);
+      }
+    }
+
+    // Wallet State
+    let currentWallet = { solLamports: 0, tokens: [] };
+    function updateWallet(data) {
+      currentWallet = data;
+      const select = document.getElementById('tx-asset');
+      select.innerHTML = `<option value="SOL">SOL (${(data.solLamports/1e9).toFixed(4)} avail)</option>`;
+      data.tokens.forEach(t => {
+        select.innerHTML += `<option value="${t.mint}">${t.symbol} (${t.uiAmount} avail)</option>`;
+      });
+      updateMaxBalance();
+    }
+
+    function updateMaxBalance() {
+      const asset = document.getElementById('tx-asset').value;
+      const maxEl = document.getElementById('tx-max-balance');
+      if (asset === 'SOL') {
+        maxEl.textContent = `Max available: ${currentWallet.solLamports} lamports (keeping 0.001 SOL for rent)`;
+      } else {
+        const t = currentWallet.tokens.find(x => x.mint === asset);
+        maxEl.textContent = `Max available: ${t ? t.uiAmount : 0}`;
+      }
+    }
+    document.getElementById('tx-asset').addEventListener('change', updateMaxBalance);
+
+    // Initial Wallet fetch
+    fetch('/api/wallet/tokens').then(r=>r.json()).then(updateWallet).catch(e => console.error(e));
+
+    // Consensus Grid Mapping
+    const providers = new Map(); // providerName -> index
+    
+    function updateConsensusVote(vote) {
+      if (!providers.has(vote.provider)) {
+        if (providers.size >= 3) return; // Full
+        providers.set(vote.provider, providers.size);
+      }
+      const idx = providers.get(vote.provider);
+      const card = document.getElementById(`vote-${idx}`);
+      
+      card.className = `provider-card ${vote.agreed ? 'agreed' : ''}`;
+      card.innerHTML = `
+        <div style="font-weight:bold; margin-bottom:5px; color:var(--secondary)">${vote.provider}</div>
+        <div class="badge ${vote.action.toLowerCase()}" style="margin-bottom:5px">${vote.action}</div>
+        <div>Tip: ${vote.tip}</div>
+      `;
+    }
+
+    let stIndex = 1;
+    function updateSelfTest(res) {
+      const el = document.getElementById(`st-p${stIndex}`);
+      if (el) {
+        el.innerHTML = `${res.provider} — ${res.passed ? '<span style="color:var(--primary)">PASS</span>' : '<span style="color:var(--error)">FAIL</span>'} (${res.latencyMs}ms)`;
+        stIndex = stIndex >= 3 ? 1 : stIndex + 1;
+      }
+    }
+
+    // ── Actions ──────────────────────────────────────────────────────────────
+
+    // Send TX
+    document.getElementById('btn-send-tx').addEventListener('click', async () => {
+      const recipient = document.getElementById('tx-recipient').value;
+      const amount = document.getElementById('tx-amount').value;
+      const asset = document.getElementById('tx-asset').value;
+      if(!recipient || !amount) return alert('Fill fields');
+
+      const payload = { recipient, amountLamports: Number(amount) };
+      if (asset !== 'SOL') payload.tokenMint = asset;
+
+      const r = await fetch('/api/tx/send', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      if(r.ok) {
+        document.getElementById('tx-recipient').value = '';
+        document.getElementById('tx-amount').value = '';
+      } else {
+        const err = await r.json(); alert(err.error);
+      }
+    });
+
+    // File input for contract
+    let contractBase64 = null;
+    document.getElementById('contract-file').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (re) => {
+        const arrayBuffer = re.target.result;
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        contractBase64 = window.btoa(binary);
+        document.getElementById('btn-deploy-contract').disabled = false;
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    // Deploy Contract
+    document.getElementById('btn-deploy-contract').addEventListener('click', async () => {
+      if (!contractBase64) return;
+      const label = document.getElementById('contract-label').value;
+      const r = await fetch('/api/contract/deploy', { 
+        method: 'POST', 
+        headers:{'Content-Type':'application/json'}, 
+        body: JSON.stringify({ programBytesBase64: contractBase64, label }) 
+      });
+      if(r.ok) {
+        document.getElementById('btn-deploy-contract').disabled = true;
+        document.getElementById('contract-file').value = '';
+        contractBase64 = null;
+      } else {
+        const err = await r.json(); alert(err.error);
+      }
+    });
+
+    // Toggle Simulation
+    document.getElementById('btn-toggle-sim').addEventListener('click', async (e) => {
+      const isActive = e.target.dataset.active === 'true';
+      await fetch('/api/simulate/toggle', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ active: !isActive })
+      });
+    });
+
+    // Consensus Self-Test
+    document.getElementById('btn-run-selftest').addEventListener('click', async () => {
+      document.getElementById('selftest-results').style.display = 'block';
+      document.getElementById('st-p1').textContent = '...';
+      document.getElementById('st-p2').textContent = '...';
+      document.getElementById('st-p3').textContent = '...';
+      stIndex = 1;
+
+      const r = await fetch('/api/consensus/test', { method: 'POST' });
+      const res = await r.json();
+      
+      if (res.allPassed) {
+        const btn = document.getElementById('btn-activate-consensus');
+        btn.disabled = false;
+        btn.style.borderColor = 'var(--primary)';
+        btn.style.color = 'var(--primary)';
+      }
+    });
+
+    // Activate Consensus
+    document.getElementById('btn-activate-consensus').addEventListener('click', async () => {
+      const r = await fetch('/api/mode', { 
+        method: 'POST', 
+        headers:{'Content-Type':'application/json'}, 
+        body: JSON.stringify({ mode: 'consensus' }) 
+      });
+      if(r.ok) {
+        alert('Consensus Mode Activated!');
+      } else {
+        const err = await r.json(); alert(err.error);
+      }
+    });
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "name": "chronos-observatory",
+  "version": "1.0.0",
+  "description": "Solana Smart Transaction Observatory",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "simulate": "tsx src/simulate.ts"
+  },
+  "dependencies": {
+    "@drift-labs/jito-ts": "4.3.0",
+    "@grpc/grpc-js": "1.10.8",
+    "@solana/spl-token": "^0.3.11",
+    "@solana/web3.js": "1.95.3",
+    "@triton-one/yellowstone-grpc": "1.4.1",
+    "axios": "1.7.2",
+    "bs58": "6.0.0",
+    "dotenv": "16.4.5",
+    "ws": "^8.21.0",
+    "yaml": "2.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.2",
+    "@types/ws": "^8.18.1",
+    "tsx": "4.15.6",
+    "typescript": "5.4.5"
+  }
+}
