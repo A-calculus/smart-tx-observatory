@@ -27,6 +27,7 @@ export interface TxPayload {
   tokenMint?: string;
   amountLamports: number;
   txId?: string;
+  sender?: string;
 }
 
 export interface BundleState {
@@ -52,6 +53,7 @@ export interface BundleState {
   };
   failureType?: string;
   failureMessage?: string;
+  failureContext?: string;
   agentReasoning?: string;
   txPayload?: TxPayload;
 }
@@ -307,7 +309,12 @@ export class StateManager {
       || this.state.bundles.failedDetails[bundleId]?.txPayload;
   }
 
-  public updateBundleStage(bundleId: string, stage: 'processed' | 'confirmed' | 'finalized' | 'failed', slot: number, failureDetails?: { type: string, message: string }): void {
+  public updateBundleStage(
+    bundleId: string,
+    stage: 'processed' | 'confirmed' | 'finalized' | 'failed',
+    slot: number,
+    failureDetails?: { type: string, message: string, context?: string }
+  ): void {
     const bundle = this.state.bundles.inFlight[bundleId];
     if (!bundle) return;
 
@@ -319,12 +326,15 @@ export class StateManager {
     if (stage === 'failed' && failureDetails) {
       bundle.failureType = failureDetails.type;
       bundle.failureMessage = failureDetails.message;
+      bundle.failureContext = failureDetails.context;
       this.state.bundles.failed.push(bundleId);
       this.state.bundles.failedDetails[bundleId] = { ...bundle };
       this.state.bundles.unprocessedFailures.push({
         bundleId,
         type: failureDetails.type,
-        message: failureDetails.message
+        message: failureDetails.context
+          ? `${failureDetails.message}\n\nCHAIN CONTEXT AT FAILURE:\n${failureDetails.context}`
+          : failureDetails.message
       });
       delete this.state.bundles.inFlight[bundleId];
     } else if (stage === 'finalized') {

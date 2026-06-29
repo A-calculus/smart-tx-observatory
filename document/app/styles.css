@@ -1,0 +1,400 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap');
+
+:root {
+  --bg: #0a0a0a;
+  --bg-light: #111;
+  --panel: rgba(17, 17, 17, 0.92);
+  --primary: #00ffb3;
+  --primary-dim: rgba(0, 255, 179, 0.16);
+  --secondary: #7fffd4;
+  --warn: #ffd700;
+  --error: #ff4444;
+  --muted: #9da9a5;
+  --text: #d8fff2;
+  --line: rgba(0, 255, 179, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%),
+    radial-gradient(circle at top left, rgba(0, 255, 179, 0.12), transparent 34rem),
+    var(--bg);
+  background-size: 100% 3px, auto, auto;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255, 0, 0, 0.035), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.035));
+  z-index: 20;
+}
+
+main {
+  width: min(1440px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 72px;
+}
+
+.hero {
+  min-height: 92vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+  gap: 24px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.eyebrow,
+.sectionTitle p {
+  color: var(--secondary);
+  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  color: var(--primary);
+  font-size: clamp(42px, 8vw, 106px);
+  line-height: 0.92;
+  margin-bottom: 22px;
+  text-transform: uppercase;
+}
+
+h2 {
+  color: var(--primary);
+  font-size: clamp(25px, 4vw, 48px);
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+
+h3 {
+  color: var(--primary);
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.lede {
+  max-width: 850px;
+  color: #dffff6;
+  font-size: clamp(16px, 2vw, 22px);
+  line-height: 1.55;
+}
+
+.heroStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.heroStats span,
+.panel,
+.terminal,
+.component,
+.flowNode,
+.swimlane,
+.tablePanel,
+.shot,
+.footerNote {
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.heroStats span {
+  padding: 14px;
+  color: var(--muted);
+}
+
+.heroStats b {
+  display: block;
+  color: var(--primary);
+  font-size: 24px;
+}
+
+.terminal {
+  padding: 0;
+  min-height: 420px;
+  box-shadow: 0 0 36px rgba(0, 255, 179, 0.08);
+}
+
+.terminalHeader {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--bg);
+  background: var(--primary);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.terminal code {
+  display: block;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(0, 255, 179, 0.18);
+  color: var(--secondary);
+  white-space: normal;
+}
+
+.grid {
+  display: grid;
+  gap: 14px;
+  margin: 24px 0;
+}
+
+.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.panel {
+  padding: 20px;
+  line-height: 1.6;
+}
+
+.panel p,
+.panel li,
+.footerNote p,
+td {
+  color: #d5eee7;
+}
+
+ul {
+  padding-left: 18px;
+  margin: 0;
+}
+
+li + li {
+  margin-top: 8px;
+}
+
+.sectionTitle {
+  margin-top: 76px;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.architecture {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 16px;
+}
+
+.flow {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.flowNode {
+  min-height: 120px;
+  padding: 14px;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.flowNode span {
+  color: var(--warn);
+}
+
+.swimlane {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.swimlane div {
+  border-left: 3px solid var(--primary);
+  padding-left: 12px;
+  color: var(--secondary);
+}
+
+.componentGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.component {
+  padding: 16px;
+  min-height: 180px;
+}
+
+.component p {
+  color: #c9e5dd;
+  line-height: 1.55;
+}
+
+.tablePanel {
+  padding: 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1080px;
+}
+
+th,
+td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(0, 255, 179, 0.18);
+  vertical-align: top;
+  text-align: left;
+}
+
+th {
+  color: var(--bg);
+  background: var(--primary);
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+td {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.strategy {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  gap: 16px;
+}
+
+.decisionTree {
+  display: grid;
+  gap: 10px;
+}
+
+.branch {
+  border: 1px solid rgba(0, 255, 179, 0.42);
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.branch.root {
+  color: var(--bg);
+  background: var(--primary);
+  font-weight: 800;
+}
+
+.branch.good {
+  border-color: var(--primary);
+}
+
+.branch.warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.branch.bad {
+  border-color: var(--error);
+  color: #ff8d8d;
+}
+
+.qa .panel {
+  min-height: 300px;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.shot {
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+}
+
+.shot img {
+  width: 100%;
+  display: block;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-bottom: 1px solid var(--line);
+}
+
+.shot span {
+  display: block;
+  padding: 12px;
+  color: var(--secondary);
+  line-height: 1.45;
+}
+
+.footerNote {
+  margin-top: 64px;
+  padding: 24px;
+}
+
+.footerNote b {
+  color: var(--primary);
+}
+
+@media (max-width: 980px) {
+  main {
+    width: min(100% - 20px, 760px);
+  }
+
+  .hero,
+  .two,
+  .three,
+  .architecture,
+  .strategy,
+  .gallery {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding-top: 32px;
+  }
+
+  .heroStats,
+  .componentGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .heroStats,
+  .componentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .terminal {
+    min-height: auto;
+  }
+}

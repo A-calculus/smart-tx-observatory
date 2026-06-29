@@ -313,11 +313,15 @@ export class SlotWatcher {
     if (cached) return cached;
 
     await this.ensureLeaderCache(slot);
+    const fetched = this.leaderCache.get(slot);
+    if (fetched) return fetched;
+
+    await this.ensureLeaderCache(slot, true);
     return this.leaderCache.get(slot) || 'unknown';
   }
 
-  private async ensureLeaderCache(slot: number): Promise<void> {
-    if (this.leaderFetchPromise) {
+  private async ensureLeaderCache(slot: number, force = false): Promise<void> {
+    if (this.leaderFetchPromise && !force) {
       await this.leaderFetchPromise;
       return;
     }
@@ -331,7 +335,9 @@ export class SlotWatcher {
         return { slot: leaderSlot, leader: leaderKey, isJito: true };
       });
 
-      this.stateManager.updateUpcomingLeaders(schedule);
+      if (schedule.length > 0) {
+        this.stateManager.updateUpcomingLeaders(schedule);
+      }
 
       const minSlotToKeep = slot - LEADER_LOOKAHEAD_SLOTS;
       for (const cachedSlot of this.leaderCache.keys()) {

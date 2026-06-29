@@ -1,0 +1,12 @@
+:HL["/_next/static/chunks/3g_e3aeq_t9qv.css","style"]
+:HL["/images/added%20a%20consensus%20mode%20becacuse%20there%20was%20just%20one%20time%20the%20ai%20hallucinat%20even%20with%20my%20prompt%20enginerring(notice%20it%20capture%20the%20speed%20of%20the%20ai%20response).png","image"]
+:HL["/images/bundled%20failed%20twice%20and%20the%20ai%20retried%2C%20it%20its%20submited%20succcessfully.png","image"]
+:HL["/images/consensus%20mode%20activated%2C%20which%20each%20slot%20leader%20validator.%20Saw%20Jupiter%20hence%20why%20i%20capture%20it.png","image"]
+:HL["/images/jito%20couldnt%20retur%20the%20exact%20reason%20why%20it%20fails%2C%20we%20go%20again%20(Day%206).png","image"]
+:HL["/images/Leader%20skipp%20and%20it%20decided%20to%20retry%20for%20this%20bundle%20by%20default%2C%20it%20leader%20skiping%20only%20informs%20its%20decision.png","image"]
+:HL["/images/showing%20upcoming%20leader%20state%20and%20the%20first%20count%20i%20saw%20when%20i%20switch%20to%20testnet.png","image"]
+:HL["/images/The%20last%20day%20i%20stopeed%20getting%20console%20logs%20and%20focus%20mainly%20on%20the%20UI.png","image"]
+:HL["/images/tricked%20the%20code%20to%20send%20a%20trassaction%20that%20doesnt%20it%2C%20the%20logic%20itself%20didnt%20process%20the%20transcation%20bundle%20ending.png","image"]
+:HL["/images/tricked%20the%20code%20to%20send%20a%20trassaction%20that%20doesnt%20it%2C%20the%20logic%20itself%20didnt%20process%20the%20transcations%20ending.png","image"]
+:HL["/images/Trying%20to%20find%20the%20middle%20ground%20for%20the%20pulse%20score%20calculation%2C%20tips%20balnce%20recomendation%2C%20and%20other%20logic.png","image"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}},"staleTime":300,"buildId":"olX-Ef5nTPVAnrYVvnEPS"}

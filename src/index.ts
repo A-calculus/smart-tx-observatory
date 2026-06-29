@@ -414,6 +414,7 @@ async function main() {
   ) {
     const txId = tx.txId || `send-${Date.now()}`;
     tx.txId = txId;
+    tx.sender = wallet.publicKey.toBase58();
     bus.txStatus(txId, `→ ${tx.recipient.slice(0, 8)}...`, 'RUNNING', `${tx.amountLamports} lam`);
     try {
       let tipVal: number;
@@ -433,7 +434,7 @@ async function main() {
           bus.log('Index', `AI timing decision: HOLD transaction (reason: ${decision.reasoning}). Waiting ${decision.waitDuration} slots.`, 'warn');
           holdRemainingSlots = decision.waitDuration;
           pendingSendTxQueue.unshift(tx); // put back at front of queue
-          bus.txStatus(txId, `→ ${tx.recipient.slice(0, 8)}...`, 'RETRYING', `HOLD: Waiting ${decision.waitDuration} slots`);
+          bus.txStatus(txId, `→ ${tx.recipient.slice(0, 8)}...`, 'WATCHING', `HOLD: Waiting ${decision.waitDuration} slots`);
           await ledger.logHold({ slot: currentSlot, pulseScore, reason: decision.reasoning, resumeSlot });
           return;
         }
@@ -457,13 +458,17 @@ async function main() {
         ));
       }
 
-      bus.txStatus(txId, `→ ${tx.recipient.slice(0, 8)}...`, 'WATCHING', 'Bundle submitted');
+      bus.txStatus(
+        txId,
+        `→ ${tx.recipient.slice(0, 8)}...`,
+        customTip !== undefined ? 'RETRYING' : 'WATCHING',
+        customTip !== undefined ? `Retry bundle submitted | tip ${tipVal}` : 'Bundle submitted'
+      );
 
       // Fire and forget bundle tracking
       jitoSubmitter.submitAndTrack(bundle, txSignature, tipVal, blockhash, pulseScore, reasoning, tx)
         .then(ok => {
-          if (ok) bus.txStatus(txId, `→ ${tx.recipient.slice(0, 8)}...`, 'VERIFIED', txSignature.slice(0, 16));
-          else bus.txStatus(txId, `→ ${tx.recipient.slice(0, 8)}...`, 'FAILED', 'Bundle rejected');
+          if (!ok) bus.txStatus(txId, `→ ${tx.recipient.slice(0, 8)}...`, 'FAILED', 'Bundle rejected');
         })
         .catch(e => {
           bus.log('Index', `SendTX tracking failed: ${e.message}`, 'error');

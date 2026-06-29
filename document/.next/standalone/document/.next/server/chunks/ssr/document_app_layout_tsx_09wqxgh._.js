@@ -1,0 +1,3 @@
+module.exports=[10804,a=>{"use strict";var b=a.i(4811);a.s(["default",0,function({children:a}){return(0,b.jsx)("html",{lang:"en",children:(0,b.jsx)("body",{children:a})})},"metadata",0,{title:"CHRONOS Observatory | Solana AI Transaction Intelligence",description:"A CTO-oriented walkthrough of CHRONOS, an AI-guided Solana/Jito transaction observability system."}])},56085,a=>{a.n(a.i(10804))}];
+
+//# sourceMappingURL=document_app_layout_tsx_09wqxgh._.js.map
