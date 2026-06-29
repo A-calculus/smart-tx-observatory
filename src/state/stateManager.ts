@@ -26,6 +26,7 @@ export interface TxPayload {
   recipient: string;
   tokenMint?: string;
   amountLamports: number;
+  txId?: string;
 }
 
 export interface BundleState {
@@ -92,6 +93,7 @@ export class StateManager {
   private state: SystemState;
   private snapshotPath: string;
   private backupTimer: NodeJS.Timeout | null = null;
+  private hasSeenLiveSlot = false;
 
   constructor(snapshotDir: string = './state') {
     this.snapshotPath = path.join(snapshotDir, 'snapshot.json');
@@ -165,6 +167,28 @@ export class StateManager {
   public updateSlot(slot: number, leader: string, skipped: boolean): void {
     const now = new Date().toISOString();
     const history = this.state.network.slotHistory;
+    const previousLiveSlot = this.state.network.latestSlot;
+
+    if (!this.hasSeenLiveSlot) {
+      this.hasSeenLiveSlot = true;
+      this.state.network.latestSlot = slot;
+      this.state.network.slotHistory.push({
+        slot,
+        timestamp: now,
+        durationMs: 400,
+        leader,
+        skipped
+      });
+
+      if (this.state.network.slotHistory.length > 50) {
+        this.state.network.slotHistory.shift();
+      }
+
+      console.log(
+        `[StateManager] First live slot after startup: ${slot}. Skipping gap detection against persisted snapshot slot ${previousLiveSlot}.`
+      );
+      return;
+    }
 
     let durationMs = 400; // default baseline
     if (history.length > 0) {
@@ -172,13 +196,13 @@ export class StateManager {
       durationMs = Date.now() - new Date(prev.timestamp).getTime();
       
       // Gap 5: Detect Leader Skip
-      if (this.state.network.latestSlot > 0 && slot - this.state.network.latestSlot > 1) {
+      if (previousLiveSlot > 0 && slot - previousLiveSlot > 1) {
         // Try to identify the skipped leader
-        const skippedSlot = this.state.network.latestSlot + 1;
+        const skippedSlot = previousLiveSlot + 1;
         const skippedLeaderInfo = this.state.network.upcomingLeaders.find(l => l.slot === skippedSlot);
         const skippedLeaderId = skippedLeaderInfo ? skippedLeaderInfo.leader : 'unknown';
 
-        console.warn(`[StateManager] LEADER_SKIP detected! Slot jumped from ${this.state.network.latestSlot} to ${slot}. Missed Leader: ${skippedLeaderId}`);
+        console.warn(`[StateManager] LEADER_SKIP detected! Slot jumped from ${previousLiveSlot} to ${slot}. Missed Leader: ${skippedLeaderId}`);
         
         if (skippedLeaderId !== 'unknown') {
           if (!this.state.network.unreliableLeaders[skippedLeaderId]) {
@@ -315,6 +339,10 @@ export class StateManager {
   }
 
   public pushFailure(bundleId: string, type: string, message: string): void {
+    if (type === 'LEADER_SKIP') {
+      console.warn(`[StateManager] Ignoring LEADER_SKIP as retry failure: ${message}`);
+      return;
+    }
     this.state.bundles.unprocessedFailures.push({ bundleId, type, message });
   }
 

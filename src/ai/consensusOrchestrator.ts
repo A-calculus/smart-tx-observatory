@@ -324,6 +324,7 @@ export class ConsensusOrchestrator {
     const leaderInfo = nextLeaderHistory
       ? `UNRELIABLE: has skipped ${nextLeaderHistory.skipCount} times recently`
       : `Good standing${nextLeaderIsJito ? ' (Jito-enabled)' : ' (not Jito)'}`;
+    const recentLeaderSkips = this.formatLeaderReliabilitySummary(state);
 
     // Derive clear tip recommendation from live market data
     const tipGuidance = p50 > 0
@@ -338,6 +339,7 @@ TARGET TRANSACTION: "${actionTarget}"
 NETWORK STATE (Slot ${latestSlot}):
 - Avg slot cadence: ${avgDuration}ms (ideal: ${slotCadenceTarget}ms)
 - Next block leader: ${nextLeader} | ${leaderInfo}
+- Recent skipped leader observations: ${recentLeaderSkips}
 - Active in-flight bundles: ${Object.keys(state.bundles.inFlight).length}
 - Session results: ${state.bundles.completed.length} success / ${state.bundles.failed.length} failed
 
@@ -377,6 +379,7 @@ Respond ONLY with a valid JSON block:
     const leaderInfo = nextLeaderHistory
       ? `UNRELIABLE: has skipped ${nextLeaderHistory.skipCount} times recently`
       : `Good standing${nextLeaderIsJito ? ' (Jito-enabled)' : ' (not Jito)'}`;
+    const recentLeaderSkips = this.formatLeaderReliabilitySummary(state);
 
     return `SYSTEM ROLE:
 You are the Diagnostic AI for a Solana smart transaction orchestrator. A transaction or bundle has failed and you must diagnose it and decide whether to RETRY or SKIP entirely.
@@ -384,6 +387,7 @@ You are the Diagnostic AI for a Solana smart transaction orchestrator. A transac
 NETWORK STATE (Slot ${latestSlot}):
 - Avg slot cadence: ${avgDuration}ms (ideal: ${slotCadenceTarget}ms)
 - Next block leader: ${nextLeader} | ${leaderInfo}
+- Recent skipped leader observations: ${recentLeaderSkips}
 - Active in-flight bundles: ${Object.keys(state.bundles.inFlight).length}
 - Session results: ${state.bundles.completed.length} success / ${state.bundles.failed.length} failed
 
@@ -408,5 +412,18 @@ Respond ONLY with a valid JSON block:
   "reasoning": "<short reasoning on why it failed and why you chose this action>"
 }
 `;
+  }
+
+  private formatLeaderReliabilitySummary(state: SystemState): string {
+    const entries = Object.entries(state.network.unreliableLeaders)
+      .filter(([, value]) => value.skipCount > 0 || value.failCount > 0)
+      .sort(([, a], [, b]) => (b.skipCount + b.failCount) - (a.skipCount + a.failCount))
+      .slice(0, 5);
+
+    if (entries.length === 0) return 'none recorded';
+
+    return entries
+      .map(([leader, value]) => `${leader.slice(0, 8)}... skips=${value.skipCount}, txFails=${value.failCount}`)
+      .join('; ');
   }
 }

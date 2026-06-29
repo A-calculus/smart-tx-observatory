@@ -70,7 +70,8 @@ function providerApiKeyForUrl(url: string, explicitKey?: string): string | undef
 }
 
 function normalizeGrpcEndpoint(url: string): string {
-  return url.replace(/^https?:\/\//, '');
+  if (!url) return '';
+  return url.startsWith('http') ? url : `https://${url}`;
 }
 
 function maskUrl(url: string): string {
@@ -216,16 +217,6 @@ async function main() {
   await stateManager.initialize();
   await ledger.initialize();
 
-  // Slot monitoring is the fastest state signal, so start it before Jito, AI,
-  // UI, tip polling, or validator metadata can delay the observability path.
-  const slotWatcher = new SlotWatcher(rpcUrl, wsUrl, grpcUrl, grpcToken, stateManager);
-  await slotWatcher.start();
-
-  const jitoSubmitter = new JitoSubmitter(connection, stateManager, failureClassifier, ledger, jitoUrl);
-  const jitoTipAccounts = await jitoSubmitter.initialize();
-  const bundleBuilder = new BundleBuilder(connection, wallet);
-  const walletInspector = new WalletInspector(connection);
-
   // ── AI Layer (single + consensus) ─────────────────────────────────────────
   const aiProviders = [
     { name: 'OpenRouter', url: process.env.OPENROUTER_URL || '', apiKey: process.env.OPENROUTER_API_KEY || '', model: process.env.OPENROUTER_MODEL || '' },
@@ -234,6 +225,11 @@ async function main() {
     { name: 'Mistral', url: process.env.MISTRAL_URL || '', apiKey: process.env.MISTRAL_API_KEY || '', model: process.env.MISTRAL_MODEL || '' }
   ];
   const aiLayer = new AILayer(aiProviders);
+
+  const jitoSubmitter = new JitoSubmitter(connection, stateManager, failureClassifier, ledger, jitoUrl);
+  let jitoTipAccounts: string[] = [];
+  const bundleBuilder = new BundleBuilder(connection, wallet);
+  const walletInspector = new WalletInspector(connection);
 
   // ── Contract Deployer ─────────────────────────────────────────────────────
   const contractDeployer = new ContractDeployer(
@@ -244,8 +240,9 @@ async function main() {
   const pendingSendTxQueue: TxPayload[] = [];
 
   const handleSendTx = (params: typeof pendingSendTxQueue[0]) => {
-    pendingSendTxQueue.push(params);
-    bus.log('Index', `Send TX queued: ${params.amountLamports} lam → ${params.recipient.slice(0, 16)}...`);
+    const queuedTx = { ...params, txId: params.txId || `send-${Date.now()}` };
+    pendingSendTxQueue.push(queuedTx);
+    bus.log('Index', `Send TX queued: ${queuedTx.amountLamports} lam → ${queuedTx.recipient.slice(0, 16)}...`);
   };
 
   // ── WebSocket server ──────────────────────────────────────────────────────
@@ -259,6 +256,30 @@ async function main() {
     onSendTx: handleSendTx,
     onContractDeploy: (bytes, label) => contractDeployer.queueDeploy(bytes, label)
   });
+
+  // ── Slot monitoring ───────────────────────────────────────────────────────
+  // App startup priority is UI -> slots -> Jito -> tips. Inside SlotWatcher,
+  // transport priority remains gRPC -> WebSocket -> HTTP RPC polling.
+  const slotWatcher = new SlotWatcher(rpcUrl, wsUrl, grpcUrl, grpcToken, stateManager);
+  slotWatcher.start().catch((e: any) => {
+    bus.log('SlotWatcher', `Startup failed: ${e.message}`, 'error');
+  });
+
+  // ── Jito setup ────────────────────────────────────────────────────────────
+  try {
+    jitoTipAccounts = await jitoSubmitter.initialize();
+    wsServer.setContext({
+      stateManager,
+      aiLayer,
+      walletInspector,
+      wallet,
+      jitoTipAccounts,
+      onSendTx: handleSendTx,
+      onContractDeploy: (bytes, label) => contractDeployer.queueDeploy(bytes, label)
+    });
+  } catch (e: any) {
+    bus.log('JitoSubmitter', `Initialization failed: ${e.message}`, 'error');
+  }
 
   // ── Observability ─────────────────────────────────────────────────────────
   const tipMonitor = new TipMonitor(stateManager, config.timing.statusPollingIntervalMs);
@@ -391,7 +412,8 @@ async function main() {
     dryRun: boolean,
     customTip?: number
   ) {
-    const txId = `send-${Date.now()}`;
+    const txId = tx.txId || `send-${Date.now()}`;
+    tx.txId = txId;
     bus.txStatus(txId, `→ ${tx.recipient.slice(0, 8)}...`, 'RUNNING', `${tx.amountLamports} lam`);
     try {
       let tipVal: number;

@@ -2,6 +2,10 @@ import { Connection } from '@solana/web3.js';
 import { StateManager } from '../state/stateManager.js';
 import { bus } from '../server/eventBus.js';
 
+const GRPC_CONNECT_TIMEOUT_MS = 10000;
+const MAX_GRPC_FAILURES_BEFORE_WSS = 3;
+const LEADER_LOOKAHEAD_SLOTS = 32;
+
 export class SlotWatcher {
   private rpcUrl: string;
   private wsUrl: string;
@@ -17,6 +21,8 @@ export class SlotWatcher {
   private grpcStream: any = null;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private reconnectDelay: number = 1000;
+  private grpcFailureCount: number = 0;
+  private grpcFallbackStarted: boolean = false;
   private pingInterval: NodeJS.Timeout | null = null;
   private grpcPermanentlyDisabled: boolean = false;
   private wssPermanentlyFailed: boolean = false;
@@ -24,6 +30,8 @@ export class SlotWatcher {
 
   // Deduplication: only forward monotonically increasing slots
   private lastProcessedSlot: number = 0;
+  private leaderCache = new Map<number, string>();
+  private leaderFetchPromise: Promise<void> | null = null;
 
   constructor(
     rpcUrl: string,
@@ -53,9 +61,10 @@ export class SlotWatcher {
     if (!this.grpcPermanentlyDisabled && this.grpcUrl && this.grpcUrl !== 'YOUR_KEY' && this.grpcToken && this.grpcToken !== 'YOUR_KEY') {
       try {
         bus.log('SlotWatcher', 'Trying gRPC first because it is the fastest slot source.');
-        await this.connectGrpc();
+        await this.withTimeout(this.connectGrpc(), GRPC_CONNECT_TIMEOUT_MS, 'gRPC initial connection timed out');
         return;
       } catch (e: any) {
+        this.cleanupGrpc();
         bus.log('SlotWatcher', `gRPC connection failed: ${e.message}. Falling back to WebSockets...`, 'warn');
       }
     } else {
@@ -65,7 +74,22 @@ export class SlotWatcher {
     await this.connectWebSocket();
   }
 
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+    let timeout: NodeJS.Timeout | null = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+
   private async connectGrpc(): Promise<void> {
+    if (this.grpcPermanentlyDisabled) return;
     const ClientModule = await import('@triton-one/yellowstone-grpc');
     const ClientClass: any = ClientModule.default || ClientModule;
 
@@ -79,38 +103,45 @@ export class SlotWatcher {
     this.grpcStream = await this.grpcClient.subscribe();
 
     this.grpcStream.on('data', (data: any) => {
+      this.grpcFailureCount = 0;
       if (data.slot) {
         const slot = Number(data.slot.slot);
 
         // Deduplicate: only process strictly increasing slots
         if (slot <= this.lastProcessedSlot) return;
         this.lastProcessedSlot = slot;
-
-        // Resolve leader from our pre-fetched schedule (gRPC leader field is often empty)
-        const upcoming = this.stateManager.getSnapshot().network.upcomingLeaders;
-        const leaderInfo = upcoming.find(l => l.slot === slot);
-        const leader = leaderInfo ? leaderInfo.leader : 'unknown';
         const skipped = data.slot.skipped === true;
 
-        bus.log('SlotWatcher', `[gRPC] Slot received: ${slot} | Leader: ${leader} | Skipped: ${skipped}`);
-        this.stateManager.updateSlot(slot, leader, skipped);
+        this.processSlot('gRPC', slot, skipped).catch((e: any) => {
+          bus.log('SlotWatcher', `[gRPC] Failed to process slot ${slot}: ${e.message}`, 'warn');
+          this.stateManager.updateSlot(slot, 'unknown', skipped);
+        });
       }
     });
 
     this.grpcStream.on('error', (err: any) => {
-      bus.log('SlotWatcher', `[gRPC] Stream error: ${err.message}`, 'error');
+      this.grpcFailureCount++;
+      bus.log('SlotWatcher', `[gRPC] Stream error (${this.grpcFailureCount}/${MAX_GRPC_FAILURES_BEFORE_WSS}): ${err.message}`, 'error');
       if (err.message && err.message.toLowerCase().includes('requires a pro')) {
         bus.log('SlotWatcher', '[gRPC] Chainstack tier does not support gRPC. Falling back to WebSocket permanently.', 'warn');
-        this.grpcPermanentlyDisabled = true;
-        this.cleanupGrpc();
-        this.connectWebSocket();
+        this.fallbackToWebSocketPermanently();
+      } else if (this.grpcFailureCount >= MAX_GRPC_FAILURES_BEFORE_WSS) {
+        bus.log('SlotWatcher', `[gRPC] Failed ${this.grpcFailureCount} times. Falling back to WebSocket for this run.`, 'warn');
+        this.fallbackToWebSocketPermanently();
       } else {
         this.handleGrpcReconnect();
       }
     });
 
     this.grpcStream.on('end', () => {
-      bus.log('SlotWatcher', '[gRPC] Stream ended');
+      if (this.grpcPermanentlyDisabled) return;
+      this.grpcFailureCount++;
+      bus.log('SlotWatcher', `[gRPC] Stream ended (${this.grpcFailureCount}/${MAX_GRPC_FAILURES_BEFORE_WSS})`, 'warn');
+      if (this.grpcFailureCount >= MAX_GRPC_FAILURES_BEFORE_WSS) {
+        bus.log('SlotWatcher', `[gRPC] Ended ${this.grpcFailureCount} times. Falling back to WebSocket for this run.`, 'warn');
+        this.fallbackToWebSocketPermanently();
+        return;
+      }
       this.handleGrpcReconnect();
     });
 
@@ -139,6 +170,7 @@ export class SlotWatcher {
       });
     });
     bus.log('SlotWatcher', '[gRPC] Slot subscription active.');
+    this.grpcFailureCount = 0;
 
     // 30-second ping keepalive to prevent Cloudflare idle stream closure (per jito.md)
     const pingRequest = {
@@ -165,10 +197,12 @@ export class SlotWatcher {
 
   private handleGrpcReconnect(): void {
     if (!this.isRunning || this.grpcPermanentlyDisabled) return;
+    if (this.reconnectTimeout) return;
     this.cleanupGrpc();
 
     bus.log('SlotWatcher', `[gRPC] Reconnecting in ${this.reconnectDelay}ms...`);
     this.reconnectTimeout = setTimeout(async () => {
+      this.reconnectTimeout = null;
       try {
         this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
         await this.connectGrpc();
@@ -178,6 +212,21 @@ export class SlotWatcher {
         this.handleGrpcReconnect();
       }
     }, this.reconnectDelay);
+  }
+
+  private fallbackToWebSocketPermanently(): void {
+    if (this.grpcFallbackStarted) return;
+    this.grpcFallbackStarted = true;
+    this.grpcPermanentlyDisabled = true;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.cleanupGrpc();
+    this.connectWebSocket().catch((e: any) => {
+      bus.log('SlotWatcher', `[WSS] Fallback failed: ${e.message}. Falling back to HTTP polling.`, 'warn');
+      this.connectPolling();
+    });
   }
 
   private async connectWebSocket(): Promise<void> {
@@ -218,13 +267,11 @@ export class SlotWatcher {
         if (slot <= this.lastProcessedSlot) return;
         this.lastProcessedSlot = slot;
 
-        const upcoming = this.stateManager.getSnapshot().network.upcomingLeaders;
-        const leaderInfo = upcoming.find(l => l.slot === slot);
-        const leader = leaderInfo ? leaderInfo.leader : 'unknown';
         const skipped = false;
-
-        bus.log('SlotWatcher', `[WSS] Slot received: ${slot} | Leader: ${leader}`);
-        this.stateManager.updateSlot(slot, leader, skipped);
+        this.processSlot('WSS', slot, skipped).catch((e: any) => {
+          bus.log('SlotWatcher', `[WSS] Failed to process slot ${slot}: ${e.message}`, 'warn');
+          this.stateManager.updateSlot(slot, 'unknown', skipped);
+        });
       });
       bus.log('SlotWatcher', '[WSS] WebSocket subscription active.');
     } catch (e: any) {
@@ -242,17 +289,61 @@ export class SlotWatcher {
         const slot = await this.connection.getSlot();
         if (slot > this.lastProcessedSlot) {
           this.lastProcessedSlot = slot;
-          const upcoming = this.stateManager.getSnapshot().network.upcomingLeaders;
-          const leaderInfo = upcoming.find(l => l.slot === slot);
-          const leader = leaderInfo ? leaderInfo.leader : 'unknown';
           const skipped = false;
-          bus.log('SlotWatcher', `[HTTP] Slot received: ${slot} | Leader: ${leader}`);
-          this.stateManager.updateSlot(slot, leader, skipped);
+          await this.processSlot('HTTP', slot, skipped);
         }
       } catch (e: any) {
         // Silent catch for polling to avoid log spam on transient HTTP errors
       }
     }, 400);
+  }
+
+  private async processSlot(source: 'gRPC' | 'WSS' | 'HTTP', slot: number, skipped: boolean): Promise<void> {
+    const leader = await this.resolveLeader(slot);
+    bus.log('SlotWatcher', `[${source}] Slot received: ${slot} | Leader: ${leader} | Skipped: ${skipped}`);
+    this.stateManager.updateSlot(slot, leader, skipped);
+  }
+
+  private async resolveLeader(slot: number): Promise<string> {
+    const upcoming = this.stateManager.getSnapshot().network.upcomingLeaders;
+    const leaderInfo = upcoming.find(l => l.slot === slot);
+    if (leaderInfo) return leaderInfo.leader;
+
+    const cached = this.leaderCache.get(slot);
+    if (cached) return cached;
+
+    await this.ensureLeaderCache(slot);
+    return this.leaderCache.get(slot) || 'unknown';
+  }
+
+  private async ensureLeaderCache(slot: number): Promise<void> {
+    if (this.leaderFetchPromise) {
+      await this.leaderFetchPromise;
+      return;
+    }
+
+    this.leaderFetchPromise = (async () => {
+      const leaders = await this.connection.getSlotLeaders(slot, LEADER_LOOKAHEAD_SLOTS);
+      const schedule = leaders.map((leader, index) => {
+        const leaderKey = leader.toBase58();
+        const leaderSlot = slot + index;
+        this.leaderCache.set(leaderSlot, leaderKey);
+        return { slot: leaderSlot, leader: leaderKey, isJito: true };
+      });
+
+      this.stateManager.updateUpcomingLeaders(schedule);
+
+      const minSlotToKeep = slot - LEADER_LOOKAHEAD_SLOTS;
+      for (const cachedSlot of this.leaderCache.keys()) {
+        if (cachedSlot < minSlotToKeep) this.leaderCache.delete(cachedSlot);
+      }
+    })();
+
+    try {
+      await this.leaderFetchPromise;
+    } finally {
+      this.leaderFetchPromise = null;
+    }
   }
 
   private cleanupGrpc(): void {

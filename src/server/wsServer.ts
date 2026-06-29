@@ -102,6 +102,12 @@ export class WsServer {
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
       if (method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
+      if (!this.ctx) {
+        res.writeHead(503);
+        res.end(JSON.stringify({ error: 'Server context is still initializing' }));
+        return;
+      }
+
       const body = await this.readBody(req);
 
       try {
